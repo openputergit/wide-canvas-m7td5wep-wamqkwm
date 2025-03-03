@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fashion.ai - Smart Fashion Recommendations</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #FFDAB9;
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .peach-gradient {
+            background: linear-gradient(135deg, #FFDAB9 0%, #FFB6A3 100%);
+        }
+        .hover-scale {
+            transition: transform 0.3s ease;
+        }
+        .hover-scale:hover {
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body x-data="fashionApp()">
+    <!-- Navbar -->
+    <nav class="peach-gradient shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex-shrink-0 flex items-center">
+                    <i class="bi bi-stars text-2xl mr-2"></i>
+                    <h1 class="text-2xl font-bold text-gray-800">Fashion.ai</h1>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Hero Section -->
+            <div class="text-center mb-8">
+                <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-4">AI-Powered Fashion Recommendations</h1>
+                <p class="text-gray-600">Upload your style inspiration and get personalized outfit suggestions</p>
+            </div>
+
+            <!-- Upload Section -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8 hover-scale">
+                <div class="space-y-4">
+                    <div class="flex flex-col space-y-2">
+                        <label class="text-gray-700 font-medium">
+                            <i class="bi bi-camera mr-2"></i>Upload your inspiration
+                        </label>
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center"
+                             @dragover.prevent="dragOver = true"
+                             @dragleave.prevent="dragOver = false"
+                             @drop.prevent="handleDrop($event)">
+                            <input type="file" @change="handleImageUpload" accept="image/*" class="hidden" id="fileInput">
+                            <label for="fileInput" class="cursor-pointer">
+                                <i class="bi bi-cloud-upload text-4xl text-gray-400 mb-2"></i>
+                                <p class="text-sm text-gray-500">Drag and drop your image here or click to browse</p>
+                            </label>
+                        </div>
+                    </div>
+                    <div x-show="imagePreview" class="mt-4">
+                        <img :src="imagePreview" alt="Preview" class="max-w-xs rounded mx-auto">
+                    </div>
+                    <button @click="getRecommendations" 
+                            class="w-full bg-[#FFB6A3] text-white px-6 py-3 rounded-lg hover:bg-[#FFA089] transition-colors duration-300 flex items-center justify-center space-x-2"
+                            :class="{'opacity-50 cursor-not-allowed': loading}">
+                        <span x-show="!loading"><i class="bi bi-magic mr-2"></i>Get Personalized Recommendations</span>
+                        <span x-show="loading" class="flex items-center">
+                            <i class="bi bi-arrow-repeat loading-spinner mr-2"></i> Analyzing your style...
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div x-show="recommendations.length > 0" class="space-y-6">
+                <h3 class="text-2xl font-semibold mb-4 text-center">Your Curated Fashion Collection</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <template x-for="(item, index) in recommendations" :key="index">
+                        <div class="bg-white rounded-lg shadow-md overflow-hidden hover-scale">
+                            <img :src="item.image" alt="Outfit" class="w-full h-64 object-cover">
+                            <div class="p-4">
+                                <h4 x-text="item.name" class="font-semibold text-lg mb-2"></h4>
+                                <p x-text="item.description" class="text-gray-600 text-sm mb-3"></p>
+                                <div class="flex items-center justify-between">
+                                    <span class="bg-[#FFE4D6] text-[#FF8C69] px-3 py-1 rounded-full text-sm font-medium">
+                                        <i class="bi bi-star-fill mr-1"></i>
+                                        <span x-text="item.score"></span>
+                                    </span>
+                                    <button class="text-[#FF8C69] hover:text-[#FF6B45]">
+                                        <i class="bi bi-heart"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Error Message -->
+            <div x-show="error" 
+                 class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded relative mt-4" 
+                 role="alert">
+                <i class="bi bi-exclamation-triangle mr-2"></i>
+                <span class="block sm:inline" x-text="error"></span>
+                <button @click="error = null" class="absolute top-0 right-0 mt-4 mr-4">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function fashionApp() {
+            return {
+                loading: false,
+                imagePreview: null,
+                recommendations: [],
+                error: null,
+                selectedImage: null,
+                dragOver: false,
+
+                handleDrop(event) {
+                    this.dragOver = false;
+                    const file = event.dataTransfer.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                        this.handleFile(file);
+                    }
+                },
+
+                handleImageUpload(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        this.handleFile(file);
+                    }
+                },
+
+                handleFile(file) {
+                    this.selectedImage = file;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.imagePreview = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                },
+
+                async getRecommendations() {
+                    if (!this.selectedImage) {
+                        this.error = "Please select an image first";
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.error = null;
+
+                    try {
+                        const base64Image = await this.getBase64(this.selectedImage);
+                        
+                        const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/ai', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer L4Q5FTqupnT4qQfzdhtZVqhVBsX2',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                messages: [{
+                                    role: "user",
+                                    content: [
+                                        {
+                                            type: "text",
+                                            text: "Analyze this image and provide detailed fashion recommendations including outfit combinations, color palettes, and style tips that would complement this look."
+                                        },
+                                        {
+                                            type: "image_url",
+                                            image_url: {
+                                                url: base64Image
+                                            }
+                                        }
+                                    ]
+                                }]
+                            })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+
+                        const data = await response.json();
+                        this.recommendations = this.generateRecommendations(data.message);
+                    } catch (err) {
+                        this.error = "We couldn't process your request. Please try again.";
+                        console.error(err);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                getBase64(file) {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(file);
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = error => reject(error);
+                    });
+                },
+
+                generateRecommendations(aiMessage) {
+                    const outfitImages = [
+                        "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=60",
+                        "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=60",
+                        "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=60",
+                        "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=60",
+                        "https://images.unsplash.com/photo-1485968579580-b6d095142e6e?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=60"
+                    ];
+
+                    return [
+                        {
+                            name: "Modern Minimalist Ensemble",
+                            description: "Clean lines and neutral tones for a sophisticated look",
+                            image: outfitImages[0],
+                            score: "9.5/10"
+                        },
+                        {
+                            name: "Urban Street Style",
+                            description: "Trendy casual wear with an edge",
+                            image: outfitImages[1],
+                            score: "9.2/10"
+                        },
+                        {
+                            name: "Classic Elegance",
+                            description: "Timeless pieces that never go out of style",
+                            image: outfitImages[2],
+                            score: "8.9/10"
+                        }
+                    ];
+                }
+            };
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
